@@ -21,6 +21,17 @@ module.exports = class UserServer {
         app.use(express.urlencoded({ extended: true}));
         app.use('/static', express.static('public'));
 
+        app.get('/api/health', (req, res) => {
+            res.status(200).json({
+                ok: true,
+                data: {
+                    status: 'healthy',
+                    uptime: process.uptime(),
+                    timestamp: new Date().toISOString(),
+                }
+            });
+        });
+
         /** a single middleware to handle all */
         app.all('/api/:moduleName/:fnName', this.userApi.mw);
 
