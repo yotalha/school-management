@@ -5,8 +5,9 @@ const md5        = require('md5');
 
 module.exports = class TokenManager {
 
-    constructor({config}){
+    constructor({config, mongomodels}){
         this.config              = config;
+        this.mongomodels         = mongomodels;
         this.longTokenExpiresIn  = '3y';
         this.shortTokenExpiresIn = '1y';
 
@@ -61,15 +62,20 @@ module.exports = class TokenManager {
 
 
     /** generate shortId based on a longId */
-    v1_createShortToken({__longToken, __device}){
-
+    async v1_createShortToken({__longToken, __device}){
 
         let decoded = __longToken;
-        console.log(decoded);
-        
+
+        const user = await this.mongomodels.user.findById(decoded.userId);
+        if (!user) {
+            return { errors: 'User not found' };
+        }
+
         let shortToken = this.genShortToken({
-            userId: decoded.userId, 
+            userId: decoded.userId,
             userKey: decoded.userKey,
+            role: user.role,
+            schoolId: user.schoolId ? user.schoolId.toString() : null,
             sessionId: nanoid(),
             deviceId: md5(__device),
         });

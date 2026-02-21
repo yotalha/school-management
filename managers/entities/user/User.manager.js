@@ -22,7 +22,8 @@ module.exports = class User {
         if (result) return { errors: result };
 
         const existingUser = await this.mongomodels.user.findOne({
-            $or: [{ username }, { email }]
+            $or: [{ username }, { email }],
+            isActive: true
         });
 
         if (existingUser) {
@@ -47,9 +48,19 @@ module.exports = class User {
             userKey: user.username
         });
 
+        const shortToken = this.tokenManager.genShortToken({
+            userId: user._id.toString(),
+            userKey: user.username,
+            role: user.role,
+            schoolId: user.schoolId ? user.schoolId.toString() : null,
+            sessionId: require('nanoid').nanoid(),
+            deviceId: 'web'
+        });
+
         return {
             user: user.toSafeObject(),
-            longToken
+            longToken,
+            shortToken
         };
     }
 
@@ -58,7 +69,7 @@ module.exports = class User {
             return { errors: 'Email and password are required' };
         }
 
-        const user = await this.mongomodels.user.findOne({ email });
+        const user = await this.mongomodels.user.findOne({ email, isActive: true });
 
         if (!user) {
             return { errors: 'Invalid credentials' };
@@ -98,7 +109,7 @@ module.exports = class User {
     async getProfile({ __token }) {
         const { userId } = __token;
 
-        const user = await this.mongomodels.user.findById(userId)
+        const user = await this.mongomodels.user.findOne({ _id: userId, isActive: true })
             .populate('schoolId', 'name');
 
         if (!user) {
@@ -129,7 +140,8 @@ module.exports = class User {
         }
 
         const existingUser = await this.mongomodels.user.findOne({
-            $or: [{ username }, { email }]
+            $or: [{ username }, { email }],
+            isActive: true
         });
 
         if (existingUser) {

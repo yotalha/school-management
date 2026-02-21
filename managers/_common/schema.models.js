@@ -128,7 +128,7 @@ module.exports = {
     capacity: {
         path: 'capacity',
         type: 'Number',
-        length: {min: 1, max: 3},
+        length: {min: 1, max: 500},
     },
     resources: {
         path: 'resources',

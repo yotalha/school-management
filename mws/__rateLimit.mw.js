@@ -1,5 +1,18 @@
 const rateLimitStore = new Map();
 
+const CLEANUP_INTERVAL = 5 * 60 * 1000;
+
+const cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of rateLimitStore) {
+        if ((now - record.windowStart) > 60 * 1000) {
+            rateLimitStore.delete(key);
+        }
+    }
+}, CLEANUP_INTERVAL);
+
+cleanupTimer.unref();
+
 module.exports = ({ meta, config, managers }) => {
     const windowMs = 60 * 1000;
     const maxRequests = 100;

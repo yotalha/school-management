@@ -150,9 +150,9 @@ module.exports = class ApiHandler {
 
             /** executed after all middleware finished */
 
-            let body = req.body || {};
+            let body = { ...(req.query || {}), ...(req.body || {}) };
             let result = await this._exec({targetModule: this.managers[moduleName], fnName, data: {
-                ...body, 
+                ...body,
                 ...results,
                 res,
             }});

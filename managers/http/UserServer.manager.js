@@ -21,14 +21,14 @@ module.exports = class UserServer {
         app.use(express.urlencoded({ extended: true}));
         app.use('/static', express.static('public'));
 
+        /** a single middleware to handle all */
+        app.all('/api/:moduleName/:fnName', this.userApi.mw);
+
         /** an error handler */
         app.use((err, req, res, next) => {
             console.error(err.stack)
             res.status(500).send('Something broke!')
         });
-        
-        /** a single middleware to handle all */
-        app.all('/api/:moduleName/:fnName', this.userApi.mw);
 
         let server = http.createServer(app);
         server.listen(this.config.dotEnv.USER_PORT, () => {

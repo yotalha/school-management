@@ -28,8 +28,9 @@ module.exports = class School {
         let result = await this.validators.school.createSchool(data);
         if (result) return { errors: result };
 
-        const existingSchool = await this.mongomodels.school.findOne({ 
-            $or: [{ name }, { email }] 
+        const existingSchool = await this.mongomodels.school.findOne({
+            $or: [{ name }, { email }],
+            isActive: true
         });
         
         if (existingSchool) {
@@ -61,8 +62,8 @@ module.exports = class School {
             return { errors: 'Access denied to this school' };
         }
 
-        const school = await this.mongomodels.school.findById(schoolId);
-        
+        const school = await this.mongomodels.school.findOne({ _id: schoolId, isActive: true });
+
         if (!school) {
             return { errors: 'School not found' };
         }
@@ -74,11 +75,11 @@ module.exports = class School {
         const { role, schoolId } = __token;
 
         let schools;
-        
+
         if (role === 'superadmin') {
-            schools = await this.mongomodels.school.find();
+            schools = await this.mongomodels.school.find({ isActive: true });
         } else {
-            schools = await this.mongomodels.school.find({ _id: schoolId });
+            schools = await this.mongomodels.school.find({ _id: schoolId, isActive: true });
         }
 
         return { schools };
@@ -99,16 +100,16 @@ module.exports = class School {
         let result = await this.validators.school.updateSchool(data);
         if (result) return { errors: result };
 
-        const school = await this.mongomodels.school.findById(schoolId);
-        
+        const school = await this.mongomodels.school.findOne({ _id: schoolId, isActive: true });
+
         if (!school) {
             return { errors: 'School not found' };
         }
 
-        if (name) school.name = name;
-        if (address) school.address = address;
-        if (phone) school.phone = phone;
-        if (email) school.email = email;
+        if (name !== undefined) school.name = name;
+        if (address !== undefined) school.address = address;
+        if (phone !== undefined) school.phone = phone;
+        if (email !== undefined) school.email = email;
 
         await school.save();
 
@@ -126,22 +127,23 @@ module.exports = class School {
             return { errors: 'School ID is required' };
         }
 
-        const school = await this.mongomodels.school.findById(schoolId);
-        
+        const school = await this.mongomodels.school.findOne({ _id: schoolId, isActive: true });
+
         if (!school) {
             return { errors: 'School not found' };
         }
 
-        const classroomCount = await this.mongomodels.classroom.countDocuments({ schoolId });
-        const studentCount = await this.mongomodels.student.countDocuments({ schoolId });
+        const classroomCount = await this.mongomodels.classroom.countDocuments({ schoolId, isActive: true });
+        const studentCount = await this.mongomodels.student.countDocuments({ schoolId, isActive: true });
 
         if (classroomCount > 0 || studentCount > 0) {
-            return { 
-                errors: 'Cannot delete school with existing classrooms or students. Remove them first.' 
+            return {
+                errors: 'Cannot delete school with existing classrooms or students. Remove them first.'
             };
         }
 
-        await this.mongomodels.school.findByIdAndDelete(schoolId);
+        school.isActive = false;
+        await school.save();
 
         return { message: 'School deleted successfully' };
     }

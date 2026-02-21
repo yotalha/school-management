@@ -37,27 +37,27 @@ module.exports = class Student {
         let result = await this.validators.student.createStudent(data);
         if (result) return { errors: result };
 
-        const school = await this.mongomodels.school.findById(targetSchoolId);
+        const school = await this.mongomodels.school.findOne({ _id: targetSchoolId, isActive: true });
         if (!school) {
             return { errors: 'School not found' };
         }
 
         if (classroomId) {
-            const classroom = await this.mongomodels.classroom.findById(classroomId);
+            const classroom = await this.mongomodels.classroom.findOne({ _id: classroomId, isActive: true });
             if (!classroom) {
                 return { errors: 'Classroom not found' };
             }
             if (classroom.schoolId.toString() !== targetSchoolId) {
                 return { errors: 'Classroom does not belong to the specified school' };
             }
-            
-            const enrolledCount = await this.mongomodels.student.countDocuments({ classroomId });
+
+            const enrolledCount = await this.mongomodels.student.countDocuments({ classroomId, isActive: true });
             if (enrolledCount >= classroom.capacity) {
                 return { errors: 'Classroom is at full capacity' };
             }
         }
 
-        const existingStudent = await this.mongomodels.student.findOne({ email });
+        const existingStudent = await this.mongomodels.student.findOne({ email, isActive: true });
         if (existingStudent) {
             return { errors: 'Student with this email already exists' };
         }
@@ -83,7 +83,7 @@ module.exports = class Student {
             return { errors: 'Student ID is required' };
         }
 
-        const student = await this.mongomodels.student.findById(studentId)
+        const student = await this.mongomodels.student.findOne({ _id: studentId, isActive: true })
             .populate('schoolId', 'name')
             .populate('classroomId', 'name');
 
@@ -101,7 +101,7 @@ module.exports = class Student {
     async getStudents({ __token, schoolId, classroomId }) {
         const { role, schoolId: adminSchoolId } = __token;
 
-        let query = {};
+        let query = { isActive: true };
 
         if (role === 'superadmin') {
             if (schoolId) query.schoolId = schoolId;
@@ -129,7 +129,7 @@ module.exports = class Student {
         let result = await this.validators.student.updateStudent(data);
         if (result) return { errors: result };
 
-        const student = await this.mongomodels.student.findById(studentId);
+        const student = await this.mongomodels.student.findOne({ _id: studentId, isActive: true });
 
         if (!student) {
             return { errors: 'Student not found' };
@@ -140,16 +140,16 @@ module.exports = class Student {
         }
 
         if (email && email !== student.email) {
-            const existingStudent = await this.mongomodels.student.findOne({ email });
+            const existingStudent = await this.mongomodels.student.findOne({ email, isActive: true });
             if (existingStudent) {
                 return { errors: 'Another student with this email already exists' };
             }
         }
 
-        if (firstName) student.firstName = firstName;
-        if (lastName) student.lastName = lastName;
-        if (email) student.email = email;
-        if (dateOfBirth) student.dateOfBirth = new Date(dateOfBirth);
+        if (firstName !== undefined) student.firstName = firstName;
+        if (lastName !== undefined) student.lastName = lastName;
+        if (email !== undefined) student.email = email;
+        if (dateOfBirth !== undefined) student.dateOfBirth = new Date(dateOfBirth);
 
         await student.save();
 
@@ -163,7 +163,7 @@ module.exports = class Student {
             return { errors: 'Student ID is required' };
         }
 
-        const student = await this.mongomodels.student.findById(studentId);
+        const student = await this.mongomodels.student.findOne({ _id: studentId, isActive: true });
 
         if (!student) {
             return { errors: 'Student not found' };
@@ -173,7 +173,8 @@ module.exports = class Student {
             return { errors: 'Access denied to delete this student' };
         }
 
-        await this.mongomodels.student.findByIdAndDelete(studentId);
+        student.isActive = false;
+        await student.save();
 
         return { message: 'Student deleted successfully' };
     }
@@ -185,7 +186,7 @@ module.exports = class Student {
             return { errors: 'Student ID and Classroom ID are required' };
         }
 
-        const student = await this.mongomodels.student.findById(studentId);
+        const student = await this.mongomodels.student.findOne({ _id: studentId, isActive: true });
         if (!student) {
             return { errors: 'Student not found' };
         }
@@ -194,7 +195,7 @@ module.exports = class Student {
             return { errors: 'Access denied to enroll this student' };
         }
 
-        const classroom = await this.mongomodels.classroom.findById(classroomId);
+        const classroom = await this.mongomodels.classroom.findOne({ _id: classroomId, isActive: true });
         if (!classroom) {
             return { errors: 'Classroom not found' };
         }
@@ -203,7 +204,7 @@ module.exports = class Student {
             return { errors: 'Classroom does not belong to the student\'s school' };
         }
 
-        const enrolledCount = await this.mongomodels.student.countDocuments({ classroomId });
+        const enrolledCount = await this.mongomodels.student.countDocuments({ classroomId, isActive: true });
         if (enrolledCount >= classroom.capacity) {
             return { errors: 'Classroom is at full capacity' };
         }
@@ -211,13 +212,13 @@ module.exports = class Student {
         student.classroomId = classroomId;
         await student.save();
 
-        const updatedStudent = await this.mongomodels.student.findById(studentId)
+        const updatedStudent = await this.mongomodels.student.findOne({ _id: studentId, isActive: true })
             .populate('schoolId', 'name')
             .populate('classroomId', 'name');
 
-        return { 
+        return {
             message: 'Student enrolled successfully',
-            student: updatedStudent 
+            student: updatedStudent
         };
     }
 
@@ -232,27 +233,28 @@ module.exports = class Student {
             return { errors: 'Student ID and Target School ID are required' };
         }
 
-        const student = await this.mongomodels.student.findById(studentId);
+        const student = await this.mongomodels.student.findOne({ _id: studentId, isActive: true });
         if (!student) {
             return { errors: 'Student not found' };
         }
 
-        const targetSchool = await this.mongomodels.school.findById(targetSchoolId);
+        const targetSchool = await this.mongomodels.school.findOne({ _id: targetSchoolId, isActive: true });
         if (!targetSchool) {
             return { errors: 'Target school not found' };
         }
 
         if (targetClassroomId) {
-            const classroom = await this.mongomodels.classroom.findById(targetClassroomId);
+            const classroom = await this.mongomodels.classroom.findOne({ _id: targetClassroomId, isActive: true });
             if (!classroom) {
                 return { errors: 'Target classroom not found' };
             }
             if (classroom.schoolId.toString() !== targetSchoolId) {
                 return { errors: 'Target classroom does not belong to the target school' };
             }
-            
-            const enrolledCount = await this.mongomodels.student.countDocuments({ 
-                classroomId: targetClassroomId 
+
+            const enrolledCount = await this.mongomodels.student.countDocuments({
+                classroomId: targetClassroomId,
+                isActive: true
             });
             if (enrolledCount >= classroom.capacity) {
                 return { errors: 'Target classroom is at full capacity' };
@@ -263,7 +265,7 @@ module.exports = class Student {
         student.classroomId = targetClassroomId || null;
         await student.save();
 
-        const updatedStudent = await this.mongomodels.student.findById(studentId)
+        const updatedStudent = await this.mongomodels.student.findOne({ _id: studentId, isActive: true })
             .populate('schoolId', 'name')
             .populate('classroomId', 'name');
 

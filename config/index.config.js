@@ -45,6 +45,7 @@ config.dotEnv = {
     ADMIN_URL,
     LONG_TOKEN_SECRET,
     SHORT_TOKEN_SECRET,
+    NACL_SECRET,
 };
 
 

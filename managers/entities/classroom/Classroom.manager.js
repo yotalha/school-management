@@ -35,14 +35,15 @@ module.exports = class Classroom {
         let result = await this.validators.classroom.createClassroom(data);
         if (result) return { errors: result };
 
-        const school = await this.mongomodels.school.findById(targetSchoolId);
+        const school = await this.mongomodels.school.findOne({ _id: targetSchoolId, isActive: true });
         if (!school) {
             return { errors: 'School not found' };
         }
 
         const existingClassroom = await this.mongomodels.classroom.findOne({
             name,
-            schoolId: targetSchoolId
+            schoolId: targetSchoolId,
+            isActive: true
         });
 
         if (existingClassroom) {
@@ -68,7 +69,7 @@ module.exports = class Classroom {
             return { errors: 'Classroom ID is required' };
         }
 
-        const classroom = await this.mongomodels.classroom.findById(classroomId)
+        const classroom = await this.mongomodels.classroom.findOne({ _id: classroomId, isActive: true })
             .populate('schoolId', 'name');
 
         if (!classroom) {
@@ -85,7 +86,7 @@ module.exports = class Classroom {
     async getClassrooms({ __token, schoolId }) {
         const { role, schoolId: adminSchoolId } = __token;
 
-        let query = {};
+        let query = { isActive: true };
 
         if (role === 'superadmin') {
             if (schoolId) {
@@ -112,7 +113,7 @@ module.exports = class Classroom {
         let result = await this.validators.classroom.updateClassroom(data);
         if (result) return { errors: result };
 
-        const classroom = await this.mongomodels.classroom.findById(classroomId);
+        const classroom = await this.mongomodels.classroom.findOne({ _id: classroomId, isActive: true });
 
         if (!classroom) {
             return { errors: 'Classroom not found' };
@@ -122,9 +123,9 @@ module.exports = class Classroom {
             return { errors: 'Access denied to update this classroom' };
         }
 
-        if (name) classroom.name = name;
+        if (name !== undefined) classroom.name = name;
         if (capacity !== undefined) classroom.capacity = capacity;
-        if (resources) classroom.resources = resources;
+        if (resources !== undefined) classroom.resources = resources;
 
         await classroom.save();
 
@@ -138,7 +139,7 @@ module.exports = class Classroom {
             return { errors: 'Classroom ID is required' };
         }
 
-        const classroom = await this.mongomodels.classroom.findById(classroomId);
+        const classroom = await this.mongomodels.classroom.findOne({ _id: classroomId, isActive: true });
 
         if (!classroom) {
             return { errors: 'Classroom not found' };
@@ -148,13 +149,14 @@ module.exports = class Classroom {
             return { errors: 'Access denied to delete this classroom' };
         }
 
-        const studentCount = await this.mongomodels.student.countDocuments({ classroomId });
-        
+        const studentCount = await this.mongomodels.student.countDocuments({ classroomId, isActive: true });
+
         if (studentCount > 0) {
             return { errors: 'Cannot delete classroom with enrolled students. Transfer them first.' };
         }
 
-        await this.mongomodels.classroom.findByIdAndDelete(classroomId);
+        classroom.isActive = false;
+        await classroom.save();
 
         return { message: 'Classroom deleted successfully' };
     }
