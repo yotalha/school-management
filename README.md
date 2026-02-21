@@ -83,48 +83,84 @@ Tests use an in-memory MongoDB instance (MongoMemoryServer) so no external datab
 
 ## Deployment
 
-### Production Deployment
+### Live Deployment (Render)
 
-1. **Set environment variables** for production:
-```env
-ENV=production
-USER_PORT=5111
-MONGO_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/school_management
-REDIS_URI=redis://<host>:6379
-LONG_TOKEN_SECRET=<strong-random-secret-min-32-chars>
-SHORT_TOKEN_SECRET=<different-strong-random-secret>
-NACL_SECRET=<another-strong-random-secret>
+The application is deployed on **Render** with automatic deployments from the `main` branch.
+
+**Live URL**: Every push to `main` triggers an automatic redeploy.
+
+**Infrastructure**:
+- **Hosting**: Render (Web Service, auto-deploy from GitHub `main` branch)
+- **Database**: MongoDB Atlas (managed cloud cluster)
+- **Cache/Pub-Sub**: Upstash Redis (serverless Redis)
+- **Health Checks**: `GET /api/health` endpoint used by Render for availability monitoring
+- **Uptime Monitoring**: Configured to alert on downtime
+
+**Key deployment decisions**:
+- The app uses `process.env.PORT` (provided by Render) instead of a hardcoded `USER_PORT`, with fallback to `5111` for local development
+- All secrets and connection strings are configured as environment variables in Render's dashboard - no sensitive data is committed to the repository
+- The `.env.example` file documents required variables without exposing real values
+
+### Environment Variables
+
+Set these in your hosting provider's dashboard (or in `.env` for local development):
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `PORT` | Server port (auto-set by Render) | `5111` |
+| `ENV` | Environment mode | `production` |
+| `MONGO_URI` | MongoDB connection string | `mongodb+srv://user:pass@cluster.mongodb.net/db` |
+| `REDIS_URI` | Redis connection string | `redis://default:pass@host:6379` |
+| `CACHE_REDIS` | Redis URL for caching | Same as `REDIS_URI` |
+| `CACHE_PREFIX` | Cache key prefix | `school:ch` |
+| `CORTEX_REDIS` | Redis URL for Cortex pub/sub | Same as `REDIS_URI` |
+| `CORTEX_PREFIX` | Cortex key prefix | `school` |
+| `CORTEX_TYPE` | Cortex service type | `school-management-api` |
+| `LONG_TOKEN_SECRET` | JWT long token secret (min 32 chars) | - |
+| `SHORT_TOKEN_SECRET` | JWT short token secret (min 32 chars) | - |
+| `NACL_SECRET` | NaCl encryption secret | - |
+| `SERVICE_NAME` | Service identifier | `school-management-api` |
+
+### Local Development
+
+1. **Set environment variables**:
+```bash
+cp .env.example .env
+# Edit .env with your local MongoDB and Redis URLs
 ```
 
-2. **Install production dependencies**:
+2. **Install dependencies and start**:
 ```bash
-npm install --production
+npm install
+npm start
 ```
 
-3. **Start with a process manager** (recommended):
+The API will be available at `http://localhost:5111`
+
+### Alternative Deployment Options
+
+**Using PM2** (process manager):
 ```bash
-# Using PM2
 npm install -g pm2
 pm2 start app.js --name school-api
+```
 
-# Or using Docker (if Dockerfile is provided)
+**Using Docker** (if Dockerfile is provided):
+```bash
 docker build -t school-api .
 docker run -p 5111:5111 --env-file .env school-api
 ```
 
-4. **Verify** the server is running:
-```bash
-curl http://localhost:5111/api/user/login
-```
-
 ### Production Checklist
 
-- [ ] Use strong, unique secrets for all `*_SECRET` env vars (min 32 characters)
-- [ ] Use a managed MongoDB instance (Atlas, DocumentDB, etc.)
-- [ ] Use a managed Redis instance (ElastiCache, Redis Cloud, etc.)
-- [ ] Set `ENV=production`
-- [ ] Run behind a reverse proxy (nginx) with HTTPS
-- [ ] Enable MongoDB authentication and use connection strings with credentials
+- [x] Use strong, unique secrets for all `*_SECRET` env vars (min 32 characters)
+- [x] Use a managed MongoDB instance (MongoDB Atlas)
+- [x] Use a managed Redis instance (Upstash Redis)
+- [x] Set `ENV=production`
+- [x] No sensitive data in repository (all via environment variables)
+- [x] Health check endpoint configured (`/api/health`)
+- [x] Uptime monitoring enabled
+- [x] Automatic deployments from `main` branch
 
 ---
 
@@ -838,6 +874,7 @@ The `POST /api/user/register` endpoint currently allows callers to specify any `
 **Recommended fix for production**: Remove the `role` parameter from `register` entirely. The endpoint should always create `school_admin` users. The initial superadmin should be created via one of:
 - **Seed script**: A one-time CLI command that inserts the superadmin directly into the database during deployment.
 - **Environment-based bootstrap**: On first startup, check if any superadmin exists. If not, create one from `ADMIN_EMAIL` / `ADMIN_PASSWORD` environment variables.
+- **Separate admin server**: The codebase already supports two ports (`USER_PORT` and `ADMIN_PORT`). Superadmin registration and other sensitive admin operations could be exposed only on the `ADMIN_PORT`, which would be kept internal (not publicly accessible). Public users would only interact with `USER_PORT`, which would never allow superadmin creation.
 
 After the first superadmin exists, additional superadmins can be created through an authenticated, superadmin-only endpoint.
 
@@ -880,6 +917,24 @@ Run tests with:
 ```bash
 npm test
 ```
+
+---
+
+## Assumptions
+
+The following assumptions were made during development:
+
+1. **First registered user can self-assign superadmin role** - The registration endpoint allows role selection for bootstrapping purposes. This is documented as a known issue with recommended production fixes (see [Security Considerations](#known-issue-open-superadmin-registration)).
+2. **Soft deletes over hard deletes** - All delete operations set `isActive: false` rather than removing records, preserving data integrity and audit trails.
+3. **School admins are scoped to exactly one school** - A `school_admin` can only manage resources within their assigned school.
+4. **Email uniqueness is global, not per-school** - Student and user emails must be unique across the entire system.
+5. **Classroom names are unique per school** - Compound unique index on `(name, schoolId)`, not globally unique.
+6. **A student can be enrolled in only one classroom at a time** - Enrolling in a new classroom replaces the previous one.
+7. **Only superadmins can transfer students between schools** - School admins are restricted to operations within their own school.
+8. **No pagination on list endpoints** - `getStudents`, `getClassrooms`, `getAllSchools` return all matching records. Pagination would be needed at scale.
+9. **No email verification on registration** - Emails are accepted as-is without a verification flow.
+10. **Rate limiting is in-memory and per-instance** - Not distributed across multiple server instances. Sufficient for single-instance deployment but would need Redis-backed rate limiting for horizontal scaling.
+11. **Redis is required** - The axion template uses Redis for Cortex pub/sub even though MongoDB is the primary data store.
 
 ---
 
